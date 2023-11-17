@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.components.sensor import SensorDeviceClass
+import homeassistant.const as ha_const
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
@@ -33,6 +34,7 @@ async def async_setup_entry(
             StartSensor(coordinator),
             RaisedSensor(coordinator),
             HoursSensor(coordinator),
+            HoursCostSensor(coordinator),
         ]
     )
 
@@ -42,6 +44,7 @@ class BusSensor(CoordinatorEntity):
     _attr_should_poll = False
 
     _key: str = "undefined"
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator) -> None:
         super().__init__(coordinator)
@@ -86,6 +89,7 @@ class YearSensor(BusSensor):
 class StartSensor(BusSensor):
     _key = "start_time"
     _attr_name = "Deset Bus Start Time"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
 
 
 class RaisedSensor(BusSensor):
@@ -93,9 +97,27 @@ class RaisedSensor(BusSensor):
     _attr_name = "Deset Bus Total Raised"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
+    _attr_suggested_unit_of_measurement = "USD"
+    _attr_state_class = SensorStateClass.TOTAL
 
 
 class HoursSensor(BusSensor):
     _key = "run_purchased"
     _attr_name = "Deset Bus Time Paid For"
     _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = ha_const.UnitOfTime.HOURS
+    _attr_suggested_unit_of_measurement = ha_const.UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.TOTAL
+
+
+class HoursCostSensor(BusSensor):
+    _key = "next_hour_price_remaining"
+    _attr_name = "Deset Bus Cost Remaining to Next Hour"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_native_unit_of_measurement = "USD"
+    _attr_suggested_unit_of_measurement = "USD"
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        return {"Total": self.coordinator.data["next_hour_price_total"]}

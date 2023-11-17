@@ -57,6 +57,8 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
             "start_time": self.data["start_time"],
             "total_raised": self.data["total_raised"],
             "run_purchased": self.data["run_purchased"],
+            "next_hour_price_total": self.data["next_hour_price_total"],
+            "next_hour_price_remaining": self.data["next_hour_price_remaining"],
         }
 
     def get_stats(self):
@@ -64,7 +66,10 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         now = datetime.datetime.now()
         if self.data is not None:
             _LOGGER.debug("Last updated %s", self._last_stats_check)
-            if now.month != 11 and now.week == self._last_stats_check.week:
+            if (
+                now.month != 11
+                and now.isocalendar().week == self._last_stats_check.isocalendar().week
+            ):
                 # Check stats once a week outside of November
                 _LOGGER.debug("Checking once a week")
                 return self._repeat_stats()
@@ -87,9 +92,10 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 # then every 15 minutes for the final hour
                 _LOGGER.debug("Checking every 15 min")
                 return self._repeat_stats()
-            elif (self.data["start_time"] + self.data["run_purchased"]) < now and (
-                self._last_stats_check + datetime.timedelta(hours=6) < now
-            ):
+            elif (
+                self.data["start_time"]
+                + datetime.timedelta(hours=self.data["run_purchased"])
+            ) < now and (self._last_stats_check + datetime.timedelta(hours=6) < now):
                 # Then every six hours after the run
                 _LOGGER.debug("Checking every 6 hours")
                 return self._repeat_stats()
@@ -110,14 +116,25 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         bus_start = datetime.datetime.fromisoformat(db_stats["Year Start Date-Time"])
         bus_start = bus_start.replace(tzinfo=self._bus_tz)
         bus_start = datetime.datetime.fromtimestamp(bus_start.timestamp())
-        run_purchased = datetime.timedelta(hours=db_stats["Max Hour Purchased"])
         self._last_stats_check = now
+        run_purchased = int(db_stats["Max Hour Purchased"])
+
+        total = float(db_stats["Total Raised"])
+
+        # Math from: https://loadingreadyrun.com/forum/viewtopic.php?t=10231
+        cost_of_purchased = round((1.07 ** (run_purchased)) * (100 / 7), 2)
+        next_hour_price_total = round(1.07 ** (run_purchased), 2)
+        next_hour_price_remaining = next_hour_price_total - (total - cost_of_purchased)
         return {
             "start_time": bus_start,
-            "now_bussing": ((bus_start + run_purchased) > now >= bus_start),
-            "total_raised": db_stats["Total Raised"],
+            "now_bussing": (
+                (bus_start + datetime.timedelta(hours=run_purchased)) > now >= bus_start
+            ),
+            "total_raised": total,
             "db_year": db_stats["Year Number"],
             "run_purchased": run_purchased,
+            "next_hour_price_total": next_hour_price_total,
+            "next_hour_price_remaining": next_hour_price_remaining,
         }
 
     def get_shift(self):
@@ -152,4 +169,6 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
             "start_time": db_stats["start_time"],
             "db_year": db_stats["db_year"],
             "run_purchased": db_stats["run_purchased"],
+            "next_hour_price_total": db_stats["next_hour_price_total"],
+            "next_hour_price_remaining": db_stats["next_hour_price_remaining"],
         }
