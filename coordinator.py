@@ -4,6 +4,7 @@ import logging
 import urllib.error
 import urllib.request
 
+import homeassistant.util.dt as hass_dt
 from homeassistant.core import (CALLBACK_TYPE, Event, HassJob, HassJobType,
                                 HomeAssistant, callback)
 from homeassistant.helpers import entity, event
@@ -31,26 +32,27 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._last_omega_check = datetime.datetime.min
-        self._last_stats_check = datetime.datetime.min
+        self._last_omega_check = datetime.datetime.min.replace(tzinfo=self._bus_tz)
+        self._last_stats_check = datetime.datetime.min.replace(tzinfo=self._bus_tz)
 
-    def get_db_year(self):
+    def get_db_year(self) -> int:
         today = datetime.date.today()
         if today.month < 11:
             # If it's before November, we're likely talking about LAST year's
             # DB run.
             return today.year - DB_YEAR_OFFSET - 1
-        else:
-            # If it's November or later, it's likely THIS year's run
-            return today.year - DB_YEAR_OFFSET
+        # If it's November or later, it's likely THIS year's run
+        return today.year - DB_YEAR_OFFSET
 
-    def _fetch_stats(self, year):
+    def _fetch_stats(self, year: int) -> dict:
         stats_url = STATS_URL_TEMPLATE.format(year=year)
         _LOGGER.debug("Fetching stats from %s", stats_url)
         with urllib.request.urlopen(stats_url) as stats:
-            return json.load(stats)[0]
+            db_stats = json.load(stats)[0]
+            assert isinstance(db_stats, dict)
+            return db_stats
 
-    def _repeat_stats(self):
+    def _repeat_stats(self) -> dict:
         return {
             "now_bussing": self.data["now_bussing"],
             "db_year": self.data["db_year"],
@@ -61,9 +63,9 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
             "next_hour_price_remaining": self.data["next_hour_price_remaining"],
         }
 
-    def get_stats(self):
+    def get_stats(self) -> dict:
         _LOGGER.debug(self.data)
-        now = datetime.datetime.now()
+        now = hass_dt.now()
         if self.data is not None:
             _LOGGER.debug("Last updated %s", self._last_stats_check)
             if (
@@ -115,7 +117,6 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
 
         bus_start = datetime.datetime.fromisoformat(db_stats["Year Start Date-Time"])
         bus_start = bus_start.replace(tzinfo=self._bus_tz)
-        bus_start = datetime.datetime.fromtimestamp(bus_start.timestamp())
         self._last_stats_check = now
         run_purchased = int(db_stats["Max Hour Purchased"])
 
@@ -138,7 +139,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         }
 
     def get_shift(self):
-        now = datetime.datetime.now()
+        now = hass_dt.now()
         if (
             self.data is not None
             and self.data.get("now_bussing")
