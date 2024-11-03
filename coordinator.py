@@ -11,7 +11,7 @@ from homeassistant.helpers import entity, event
 from homeassistant.helpers.update_coordinator import \
     TimestampDataUpdateCoordinator
 
-from .const import DB_YEAR_OFFSET, OMEGA_CHECK_URL, SHIFTS, STATS_URL_TEMPLATE
+from .const import DB_YEAR_OFFSET, OMEGA_CHECK_URL, SHIFTS, STATS_URL_TEMPLATE, STATS_RATE_LIMIT, OMEGA_RATE_LIMIT
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,9 +26,6 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         (datetime.time(12), datetime.time(18)): SHIFTS.ALPHA,
         (datetime.time(18), datetime.time(23, 59, 59)): SHIFTS.NIGHT,
     }
-
-    _omega_ratelimit = datetime.timedelta(minutes=10)
-    _stats_ratelimit = datetime.timedelta(minutes=5)
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -102,7 +99,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 _LOGGER.debug("Checking every 6 hours")
                 return self._repeat_stats()
 
-            elif self._last_stats_check + self._stats_ratelimit > now:
+            elif self._last_stats_check + STATS_RATE_LIMIT > now:
                 # and every 5 minutes durring the run
                 _LOGGER.debug("Checking every 5 min")
                 return self._repeat_stats()
@@ -138,12 +135,12 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
             "next_hour_price_remaining": next_hour_price_remaining,
         }
 
-    def get_shift(self):
+    def get_shift(self) -> str | None:
         now = hass_dt.now()
         if (
             self.data is not None
             and self.data.get("now_bussing")
-            and (now - self._last_omega_check >= self._omega_ratelimit)
+            and (now - self._last_omega_check >= OMEGA_RATE_LIMIT)
         ):
             _LOGGER.debug("NEED TO UPDATE OMEGASHIFT")
             with urllib.request.urlopen(OMEGA_CHECK_URL) as omega_check:
@@ -157,10 +154,10 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 current_shift = shift_name
         return current_shift
 
-    def now_bussing(self):
+    def now_bussing(self) -> bool:
         return True
 
-    async def _async_update_data(self):
+    async def _async_update_data(self) -> dict:
         db_stats = await self.hass.async_add_executor_job(self.get_stats)
         current_shift = await self.hass.async_add_executor_job(self.get_shift)
         return {
