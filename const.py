@@ -1,4 +1,5 @@
 """Constants for the Desert Bus integration."""
+
 import datetime
 
 DOMAIN = "desertbus"
@@ -12,9 +13,15 @@ STATS_URL_TEMPLATE = f"{CHECK_URL_BASE}/DB{{year}}/data/DB{{year}}_stats.json"
 
 DB_YEAR_OFFSET = 2006
 
-STATS_RATE_LIMIT = datetime.timedelta(minutes=2)
+RATE_LIMITS = {
+    "STATS": {
+        "DURING_RUN": datetime.timedelta(minutes=2),
+        "POST_RUN": datetime.timedelta(hours=6),
+    },
+    "OMEGA_SHIFT": datetime.timedelta(minutes=10),
+}
 
-OMEGA_RATE_LIMIT = datetime.timedelta(minutes=10)
+BUS_TIMEZONE = datetime.timezone(datetime.timedelta(hours=-8))
 
 
 class SHIFTS:

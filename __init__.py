@@ -1,4 +1,5 @@
 """The Desert Bus integration."""
+
 from __future__ import annotations
 
 import datetime
@@ -23,18 +24,6 @@ CONFIG_SCHEMA = cv.empty_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Track the state of the sun."""
 
-    coordinator = DesertBusUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=DOMAIN,
-        update_interval=datetime.timedelta(seconds=15),
-    )
-    await coordinator.async_refresh()
-
-    hass.data[DOMAIN] = {
-        "coordinator": coordinator,
-    }
-
     hass.async_create_task(
         hass.config_entries.flow.async_init(
             DOMAIN,
@@ -45,11 +34,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Desert Bus from a config entry."""
 
-    hass.data.setdefault(DOMAIN, {})
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    coordinator = DesertBusUpdateCoordinator(
+        hass,
+        _LOGGER,
+        name=DOMAIN,
+        update_interval=datetime.timedelta(seconds=15),
+    )
+    await coordinator.async_config_entry_first_refresh()
+    hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = coordinator
+    await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
     return True
 

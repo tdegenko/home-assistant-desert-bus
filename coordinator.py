@@ -11,7 +11,7 @@ from homeassistant.helpers import entity, event
 from homeassistant.helpers.update_coordinator import \
     TimestampDataUpdateCoordinator
 
-from .const import DB_YEAR_OFFSET, OMEGA_CHECK_URL, SHIFTS, STATS_URL_TEMPLATE, STATS_RATE_LIMIT, OMEGA_RATE_LIMIT
+from .const import DB_YEAR_OFFSET, OMEGA_CHECK_URL, SHIFTS, STATS_URL_TEMPLATE, RATE_LIMITS, BUS_TIMEZONE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +19,6 @@ _LOGGER = logging.getLogger(__name__)
 class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
     """Desert Bus Data Coordinator"""
 
-    _bus_tz = datetime.timezone(datetime.timedelta(hours=-8))
     _shifts = {
         (datetime.time(0), datetime.time(6)): SHIFTS.ZETA,
         (datetime.time(6), datetime.time(12)): SHIFTS.DAWN,
@@ -29,8 +28,8 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self._last_omega_check = datetime.datetime.min.replace(tzinfo=self._bus_tz)
-        self._last_stats_check = datetime.datetime.min.replace(tzinfo=self._bus_tz)
+        self._last_omega_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
+        self._last_stats_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
 
     def get_db_year(self) -> int:
         today = datetime.date.today()
@@ -74,34 +73,22 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 return self._repeat_stats()
             elif (
                 self.data["start_time"].year < now.year
-                and self._last_stats_check + datetime.timedelta(days=1) < now
+                and self._last_stats_check.day < now.day
             ):
                 # In november check once a day untill this years stats show up
                 _LOGGER.debug("Checking once a day")
                 return self._repeat_stats()
-            elif (self.data["start_time"] - now) >= datetime.timedelta(days=1) and (
-                self._last_stats_check + datetime.timedelta(hours=1) < now
-            ):
-                # Then every hour until the final day
-                _LOGGER.debug("Checking once an hour")
-                return self._repeat_stats()
-            elif (self.data["start_time"] - now) >= datetime.timedelta(hours=1) and (
-                self._last_stats_check + datetime.timedelta(minutes=15) < now
-            ):
-                # then every 15 minutes for the final hour
-                _LOGGER.debug("Checking every 15 min")
-                return self._repeat_stats()
             elif (
                 self.data["start_time"]
                 + datetime.timedelta(hours=self.data["run_purchased"])
-            ) < now and (self._last_stats_check + datetime.timedelta(hours=6) < now):
+            ) < now and (self._last_stats_check + RATE_LIMITS["STATS"]["POST_RUN"] < now):
                 # Then every six hours after the run
-                _LOGGER.debug("Checking every 6 hours")
+                _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["POST_RUN"])
                 return self._repeat_stats()
 
-            elif self._last_stats_check + STATS_RATE_LIMIT > now:
+            elif self._last_stats_check + RATE_LIMITS["STATS"]["DURING_RUN"] > now:
                 # and every 5 minutes durring the run
-                _LOGGER.debug("Checking every 5 min")
+                _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["DURING_RUN"])
                 return self._repeat_stats()
         try:
             db_stats = self._fetch_stats(self.get_db_year())
@@ -113,7 +100,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 db_stats = self._fetch_stats(self.get_db_year() - 1)
 
         bus_start = datetime.datetime.fromisoformat(db_stats["Year Start Date-Time"])
-        bus_start = bus_start.replace(tzinfo=self._bus_tz)
+        bus_start = bus_start.replace(tzinfo=BUS_TIMEZONE)
         self._last_stats_check = now
         run_purchased = int(db_stats["Max Hour Purchased"])
 
@@ -140,22 +127,19 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         if (
             self.data is not None
             and self.data.get("now_bussing")
-            and (now - self._last_omega_check >= OMEGA_RATE_LIMIT)
+            and (now - self._last_omega_check >= RATE_LIMITS["OMEGA_SHIFT"])
         ):
-            _LOGGER.debug("NEED TO UPDATE OMEGASHIFT")
+            _LOGGER.debug("NEED TO UPDATE OMEGA SHIFT")
             with urllib.request.urlopen(OMEGA_CHECK_URL) as omega_check:
                 self._last_omega_check = now
                 if int(omega_check.read().strip()) == 1:
                     return SHIFTS.OMEGA
         current_shift = None
-        bus_now = datetime.datetime.now(tz=self._bus_tz).time()
+        bus_now = datetime.datetime.now(tz=BUS_TIMEZONE).time()
         for (shift_start, shift_end), shift_name in self._shifts.items():
             if shift_start <= bus_now < shift_end:
                 current_shift = shift_name
         return current_shift
-
-    def now_bussing(self) -> bool:
-        return True
 
     async def _async_update_data(self) -> dict:
         db_stats = await self.hass.async_add_executor_job(self.get_stats)
