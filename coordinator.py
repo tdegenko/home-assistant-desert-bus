@@ -3,6 +3,7 @@ import json
 import logging
 import urllib.error
 import urllib.request
+import typing
 
 import homeassistant.util.dt as hass_dt
 from homeassistant.core import (CALLBACK_TYPE, Event, HassJob, HassJobType,
@@ -11,7 +12,8 @@ from homeassistant.helpers import entity, event
 from homeassistant.helpers.update_coordinator import \
     TimestampDataUpdateCoordinator
 
-from .const import DB_YEAR_OFFSET, OMEGA_CHECK_URL, SHIFTS, STATS_URL_TEMPLATE, RATE_LIMITS, BUS_TIMEZONE
+from .const import (BUS_TIMEZONE, DB_YEAR_OFFSET, OMEGA_CHECK_URL, RATE_LIMITS,
+                    SHIFTS, STATS_URL_TEMPLATE)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         (datetime.time(18), datetime.time(23, 59, 59)): SHIFTS.NIGHT,
     }
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         super().__init__(*args, **kwargs)
         self._last_omega_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
         self._last_stats_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
@@ -81,7 +83,9 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
             elif (
                 self.data["start_time"]
                 + datetime.timedelta(hours=self.data["run_purchased"])
-            ) < now and (self._last_stats_check + RATE_LIMITS["STATS"]["POST_RUN"] < now):
+            ) < now and (
+                self._last_stats_check + RATE_LIMITS["STATS"]["POST_RUN"] < now
+            ):
                 # Then every six hours after the run
                 _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["POST_RUN"])
                 return self._repeat_stats()
@@ -90,6 +94,8 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 # and every 5 minutes durring the run
                 _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["DURING_RUN"])
                 return self._repeat_stats()
+
+        db_stats = {}
         try:
             db_stats = self._fetch_stats(self.get_db_year())
         except urllib.error.HTTPError as err:
@@ -98,10 +104,16 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                     "Got 404 for DB Stats JSON, new year's probably isn't up yet, try pulling last years"
                 )
                 db_stats = self._fetch_stats(self.get_db_year() - 1)
+        except json.JSONDecodeError as err:
+            _LOGGER.critical(err)
+
+        if db_stats:
+            self._last_stats_check = now
+        else:
+            return self._repeat_stats()
 
         bus_start = datetime.datetime.fromisoformat(db_stats["Year Start Date-Time"])
         bus_start = bus_start.replace(tzinfo=BUS_TIMEZONE)
-        self._last_stats_check = now
         run_purchased = int(db_stats["Max Hour Purchased"])
 
         total = float(db_stats["Total Raised"])
@@ -142,7 +154,10 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
         return current_shift
 
     async def _async_update_data(self) -> dict:
-        db_stats = await self.hass.async_add_executor_job(self.get_stats)
+        try:
+            db_stats = await self.hass.async_add_executor_job(self.get_stats)
+        except urllib.error.URLError as e:
+            _LOGGER.critical(e)
         current_shift = await self.hass.async_add_executor_job(self.get_shift)
         return {
             "current_shift": current_shift,
