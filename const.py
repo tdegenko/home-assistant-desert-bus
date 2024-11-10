@@ -13,9 +13,9 @@ STATS_URL_TEMPLATE = f"{CHECK_URL_BASE}/DB{{year}}/data/DB{{year}}_stats.json"
 
 DB_YEAR_OFFSET = 2006
 
-RATE_LIMITS = {
+RATE_LIMITS: dict = {
     "STATS": {
-        "DURING_RUN": datetime.timedelta(minutes=2),
+        "DURING_RUN": datetime.timedelta(minutes=15),
         "POST_RUN": datetime.timedelta(hours=6),
     },
     "OMEGA_SHIFT": datetime.timedelta(minutes=10),

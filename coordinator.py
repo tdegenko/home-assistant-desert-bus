@@ -1,24 +1,25 @@
 import datetime
 import json
 import logging
+import typing
 import urllib.error
 import urllib.request
-import typing
 
 import homeassistant.util.dt as hass_dt
 from homeassistant.core import (CALLBACK_TYPE, Event, HassJob, HassJobType,
                                 HomeAssistant, callback)
 from homeassistant.helpers import entity, event
-from homeassistant.helpers.update_coordinator import \
-    TimestampDataUpdateCoordinator
+from homeassistant.helpers.typing import StateType
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (BUS_TIMEZONE, DB_YEAR_OFFSET, OMEGA_CHECK_URL, RATE_LIMITS,
                     SHIFTS, STATS_URL_TEMPLATE)
+from .util import BusMath
 
 _LOGGER = logging.getLogger(__name__)
 
 
-class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
+class DesertBusUpdateCoordinator(DataUpdateCoordinator):
     """Desert Bus Data Coordinator"""
 
     _shifts = {
@@ -91,7 +92,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 return self._repeat_stats()
 
             elif self._last_stats_check + RATE_LIMITS["STATS"]["DURING_RUN"] > now:
-                # and every 5 minutes durring the run
+                # and every 15 minutes durring the run
                 _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["DURING_RUN"])
                 return self._repeat_stats()
 
@@ -118,9 +119,8 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
 
         total = float(db_stats["Total Raised"])
 
-        # Math from: https://loadingreadyrun.com/forum/viewtopic.php?t=10231
-        cost_of_purchased = round((1.07 ** (run_purchased)) * (100 / 7), 2)
-        next_hour_price_total = round(1.07 ** (run_purchased), 2)
+        cost_of_purchased = BusMath.hours_to_dollars(run_purchased)
+        next_hour_price_total = BusMath.price_for_hour(run_purchased)
         next_hour_price_remaining = next_hour_price_total - (total - cost_of_purchased)
         return {
             "start_time": bus_start,
@@ -153,7 +153,7 @@ class DesertBusUpdateCoordinator(TimestampDataUpdateCoordinator):
                 current_shift = shift_name
         return current_shift
 
-    async def _async_update_data(self) -> dict:
+    async def _async_update_data(self) -> dict[str, StateType]:
         try:
             db_stats = await self.hass.async_add_executor_job(self.get_stats)
         except urllib.error.URLError as e:

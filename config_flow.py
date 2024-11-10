@@ -1,4 +1,5 @@
 """Config flow for Desert Bus integration."""
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +17,17 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_NAME = "Desert Bus For Hope"
 
+DATA_SCHEMA = vol.Schema(
+    {
+        ("subscribe_key"): str,
+        ("channel"): str,
+    }
+)
+
+
+async def validate_input(hass: HomeAssistant, data: dict) -> bool:
+    return True
+
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Desert Bus."""
@@ -24,16 +36,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> config_entries.ConfigFlowResult:
         """Handle a flow initialized by the user."""
+        errors = {}
         if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+            errors["base"] = "single_instance_allowed"
+        elif user_input is not None:
+            try:
+                data = await validate_input(self.hass, user_input)
+                if data:
+                    return self.async_create_entry(title=DEFAULT_NAME, data=user_input)
+                else:
+                    errors["base"] = "unable_validate"
+            except Exception:
+                errors["base"] = "error_validating"
 
-        if user_input is not None:
-            return self.async_create_entry(title=DEFAULT_NAME, data={})
+        return self.async_show_form(
+            step_id="user", data_schema=DATA_SCHEMA, errors=errors
+        )
 
-        return self.async_show_form(step_id="user")
-
-    async def async_step_import(self, user_input: dict[str, Any]) -> FlowResult:
+    async def async_step_import(
+        self, user_input: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
         """Handle import from configuration.yaml."""
         return await self.async_step_user(user_input)
