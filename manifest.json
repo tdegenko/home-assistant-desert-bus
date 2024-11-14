@@ -12,5 +12,6 @@
   "requirements": ["pubnub"],
   "ssdp": [],
   "zeroconf": [],
+  "single_config_entry": true,
   "version": "0.0"
 }

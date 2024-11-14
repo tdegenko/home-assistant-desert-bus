@@ -38,10 +38,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle a flow initialized by the user."""
+        # Assign a unique ID to the flow and abort the flow
+        # if another flow with the same unique ID is in progress
+        await self.async_set_unique_id("desert-bus-cloud")
+
+        # Abort the flow if a config entry with the same unique ID exists
+        self._abort_if_unique_id_configured()
+        return await self.async_step_common(user_input)
+
+    async def async_step_common(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
         errors = {}
-        if self._async_current_entries():
-            errors["base"] = "single_instance_allowed"
-        elif user_input is not None:
+        if user_input is not None:
             try:
                 data = await validate_input(self.hass, user_input)
                 if data:
@@ -54,6 +63,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user", data_schema=DATA_SCHEMA, errors=errors
         )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Handle reconfiguration of the receiver."""
+        return await self.async_step_common()
 
     async def async_step_import(
         self, user_input: dict[str, Any]
