@@ -49,6 +49,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_common(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
+        """"""
         errors = {}
         if user_input is not None:
             try:
@@ -68,7 +69,27 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration of the receiver."""
-        return await self.async_step_common()
+        #return await self.async_step_common()
+        errors = {}
+        _LOGGER.debug("Reconfiguring desertbus")
+        if user_input is not None:
+            _LOGGER.debug("We have user input")
+            try:
+                _LOGGER.debug("validating user input")
+                data = await validate_input(self.hass, user_input)
+                if data:
+                    _LOGGER.debug("Data validates")
+                    await self.async_set_unique_id("desert-bus-cloud")
+                    return self.async_update_reload_and_abort(self._get_reconfigure_entry(), data=user_input)
+                else:
+                    _LOGGER.debug("Data DOES NOT validates")
+                    errors["base"] = "unable_validate"
+            except Exception:
+                errors["base"] = "error_validating"
+
+        return self.async_show_form(
+            step_id="reconfigure", data_schema=DATA_SCHEMA, errors=errors
+        )
 
     async def async_step_import(
         self, user_input: dict[str, Any]
