@@ -9,9 +9,9 @@
   "documentation": "https://github.com/tdegenko/home-assistant-desert-bus",
   "homekit": {},
   "iot_class": "cloud_polling",
-  "requirements": ["pubnub"],
+  "requirements": ["pubnub","lxml","cssselect"],
   "ssdp": [],
   "zeroconf": [],
   "single_config_entry": true,
-  "version": "0.0"
+  "version": "0.1"
 }

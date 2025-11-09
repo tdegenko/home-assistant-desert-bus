@@ -5,7 +5,9 @@ import typing
 import urllib.error
 import urllib.request
 
+import dateutil
 import homeassistant.util.dt as hass_dt
+import lxml.html
 from homeassistant.core import (CALLBACK_TYPE, Event, HassJob, HassJobType,
                                 HomeAssistant, callback)
 from homeassistant.helpers import entity, event
@@ -13,7 +15,7 @@ from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import (BUS_TIMEZONE, DB_YEAR_OFFSET, OMEGA_CHECK_URL, RATE_LIMITS,
-                    SHIFTS, STATS_URL_TEMPLATE)
+                    SCRAPE_URL_TEMPLATE, SHIFTS, STATS_URL_TEMPLATE)
 from .util import BusMath
 
 _LOGGER = logging.getLogger(__name__)
@@ -51,6 +53,31 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
             assert isinstance(db_stats, dict)
             return db_stats
 
+    def _scrape_stats(self, year: int) -> dict:
+        scrape_url = SCRAPE_URL_TEMPLATE.format(year=year)
+        _LOGGER.debug("Fetching scrape from %s", scrape_url)
+        with urllib.request.urlopen(scrape_url) as scrape:
+            db_parser = lxml.html.parse(scrape)
+            db_root = db_parser.getroot()
+            possible_elements = db_root.cssselect("div .text-xs.text-brand-gold")
+            for element in possible_elements:
+                element_text = element.text
+                search_str = "Begins "
+                loc = element_text.find(search_str)
+                if loc != -1:
+                    start_text = element_text[loc + len(search_str) :]
+                    start_time = dateutil.parser.parse(start_text, ignoretz=True)
+                search_str = " Total Raised"
+                loc = element_text.find(search_str)
+                if loc != -1:
+                    raised_text = element.getnext().text
+                    total_raised = raised_text[raised_text.find("$") + 1 :]
+
+            return {
+                "start-time": start_time.isoformat(),
+                "total-raised": total_raised.replace(",", ""),
+            }
+
     def _repeat_stats(self) -> dict:
         return {
             "now_bussing": self.data["now_bussing"],
@@ -63,6 +90,7 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
         }
 
     def get_stats(self) -> dict:
+        """"""
         _LOGGER.debug(self.data)
         now = hass_dt.now()
         if self.data is not None:
@@ -104,7 +132,23 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug(
                     "Got 404 for DB Stats JSON, new year's probably isn't up yet, try pulling last years"
                 )
-                db_stats = self._fetch_stats(self.get_db_year() - 1)
+                if (
+                    now.month == 11 and now.day >= 7
+                ):  # We're in November by more than a week, lets try scraping the start time
+                    try:
+                        scraped_stats = self._scrape_stats(now.year)
+                    except urllib.error.HTTPError as err:
+                        _LOGGER.error("Error scraping DB page for stats %s", err)
+                        return self._repeat_stats()
+                    db_stats = {
+                        "Year Start Date-Time": scraped_stats["start-time"],
+                        "Year Number": self.get_db_year(),
+                        "Max Hour Purchased": 0,
+                        "Total Raised": scraped_stats["total-raised"],
+                    }
+
+                else:
+                    db_stats = self._fetch_stats(self.get_db_year() - 1)
         except json.JSONDecodeError as err:
             _LOGGER.critical(err)
 

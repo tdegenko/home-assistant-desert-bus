@@ -6,10 +6,12 @@ DOMAIN = "desertbus"
 SIGNAL_EVENTS_CHANGED = f"{DOMAIN}_events_changed"
 
 CHECK_URL_BASE = "https://vst.ninja"
+SCRAPE_URL_BASE = "https://desertbus.org"
 
 OMEGA_CHECK_URL = f"{CHECK_URL_BASE}/Resources/isitomegashift.html"
 
 STATS_URL_TEMPLATE = f"{CHECK_URL_BASE}/DB{{year}}/data/DB{{year}}_stats.json"
+SCRAPE_URL_TEMPLATE = f"{SCRAPE_URL_BASE}/{{year}}/"
 
 DB_YEAR_OFFSET = 2006
 

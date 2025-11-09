@@ -58,10 +58,13 @@ class BusNub:
 
         def fetch_callback(envelope: PNFetchMessagesResult, status: PNStatus) -> None:
             total_raised: float
+            _LOGGER.debug("PubNub request returned an status: %s", status.__dict__)
+            _LOGGER.warning("PubNub request returned an envelope: %s ", envelope.__dict__)
             if status and status.is_error():
                 _LOGGER.warning("PubNub request returned an error!")
                 return
             for channel_name, items in envelope.channels.items():
+                _LOGGER.debug("Got %s:%s", channel_name, items)
                 if channel_name == urllib.parse.quote(self._channel):
                     total_raised = items[0].message
             self._pubnub_inited = True
