@@ -94,6 +94,41 @@ class ShiftSensor(BusSensor):
         SHIFTS.ZETA,
         SHIFTS.OMEGA,
     ]
+    _shift_colors = {
+        SHIFTS.DAWN: {
+            "primary": [239, 130, 34],
+            "secondary": [192, 106, 41],
+            "tertiary": [236, 227, 58],
+        },
+        SHIFTS.ALPHA: {
+            "primary": [188, 37, 41],
+            "secondary": [116, 18, 20],
+            "tertiary": [188, 37, 41],
+        },
+        SHIFTS.NIGHT: {
+            "primary": [9, 114, 186],
+            "secondary": [36, 34, 98],
+            "tertiary": [34, 171, 226],
+        },
+        SHIFTS.ZETA: {
+            "primary": [94, 55, 137],
+            "secondary": [145, 100, 171],
+            "tertiary": [94, 55, 137],
+        },
+        SHIFTS.OMEGA: {
+            "primary": [117, 204, 214],
+            "secondary": [229, 160, 43],
+            "tertiary": [115, 116, 116],
+        },
+    }
+
+    @property
+    def extra_state_attributes(self):
+        return {
+            "color_primary": self._shift_colors[self.state]["primary"],
+            "color_secondary": self._shift_colors[self.state]["secondary"],
+            "color_tertiary": self._shift_colors[self.state]["tertiary"],
+        }
 
 
 class YearSensor(BusSensor):
