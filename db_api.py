@@ -37,7 +37,7 @@ class APIBus:
 
     def close_api(self) -> None:
         """"""
-        self._db_listener.close()
+        self._db_listener.teardown()
 
     @property
     def online(self) -> bool:

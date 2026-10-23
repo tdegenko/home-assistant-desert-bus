@@ -39,6 +39,7 @@ async def async_setup_entry(
     _LOGGER.debug(config_entry.data)
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     bus_api = APIBus(desertbus.Series(name="prime", id="12pEtImeluwLBvtnl7zlaV"))
+    await hass.async_add_executor_job(bus_api.init_api)
     hass.data.setdefault(DOMAIN, {})[config_entry.entry_id]["api"] = bus_api
     add_entities(
         [
@@ -51,7 +52,6 @@ async def async_setup_entry(
             RaisedSensor(bus_api),
         ]
     )
-    await hass.async_add_executor_job(bus_api.init_api)
 
 
 class BusSensor(CoordinatorEntity):
@@ -254,6 +254,7 @@ class HoursCostSensor(FastBusSensor):
 
     @property
     def extra_state_attributes(self) -> dict:
+        """"""
         total = self._api.total_raised
         run_purchased = BusMath.dollars_to_hours(total)
         next_hour_price_total = BusMath.price_for_hour(run_purchased)
