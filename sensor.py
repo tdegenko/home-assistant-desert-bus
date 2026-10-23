@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 import typing
 
@@ -37,21 +38,36 @@ async def async_setup_entry(
 ) -> None:
     """Set up the sensor platform."""
     _LOGGER.debug(config_entry.data)
-    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    bus_api = APIBus(desertbus.Series(name="prime", id="12pEtImeluwLBvtnl7zlaV"))
-    await hass.async_add_executor_job(bus_api.init_api)
-    hass.data.setdefault(DOMAIN, {})[config_entry.entry_id]["api"] = bus_api
-    add_entities(
-        [
-            ShiftSensor(coordinator),
-            CurrentlyBussingSensor(coordinator),
-            YearSensor(coordinator),
+    series = await hass.async_add_executor_job(desertbus.get_series)
+    entities = []
+    for s in series:
+        coordinator = DesertBusUpdateCoordinator(
+            hass,
+            _LOGGER,
+            name=DOMAIN,
+            update_interval=datetime.timedelta(seconds=15),
+            db_series=s,
+        )
+        await coordinator.async_config_entry_first_refresh()
+        hass.data.setdefault(DOMAIN, {})[config_entry.entry_id]["coordinator"][
+            s.id
+        ] = coordinator
+        bus_api = APIBus(s)
+        if s.name == "Prime":
+            entities += [
+                ShiftSensor(coordinator),
+                YearSensor(coordinator),
+                HoursSensor(bus_api),
+                HoursCostSensor(bus_api),
+            ]
+        entities += [
             StartSensor(coordinator),
-            HoursSensor(bus_api),
-            HoursCostSensor(bus_api),
             RaisedSensor(bus_api),
+            CurrentlyBussingSensor(coordinator),
         ]
-    )
+        await hass.async_add_executor_job(bus_api.init_api)
+        hass.data.setdefault(DOMAIN, {})[config_entry.entry_id]["api"][s.id] = bus_api
+    add_entities(entities)
 
 
 class BusSensor(CoordinatorEntity):
@@ -66,12 +82,12 @@ class BusSensor(CoordinatorEntity):
     def __init__(self, coordinator: DesertBusUpdateCoordinator) -> None:
         """Initialize."""
         super().__init__(coordinator)
-        self.entity_id = f"sensor.desertbus_{self._key}"
-        self._attr_unique_id = f"desertbus_{self._key}"
+#        self.entity_id = f"sensor.desertbus_{coordinator.series.name.lower()}_{self._key}"
+        self._attr_unique_id = f"{coordinator.series.name.lower()}_{self._key}"
         self._attr_device_info = DeviceInfo(
-            name="Desert Bus",
+            name=f"Desert Bus {coordinator.series.name}",
             entry_type=DeviceEntryType.SERVICE,
-            identifiers={(DOMAIN, "desertbus")},
+            identifiers={(DOMAIN, f"desertbus-{coordinator.series.id}")},
         )
 
     @property
@@ -84,7 +100,7 @@ class CurrentlyBussingSensor(BusSensor):
     """"""
 
     _key = "now_bussing"
-    _attr_name = "Deset Bus Currently Bussing"
+    _attr_name = "Desert Bus Currently Bussing"
 
 
 class ShiftSensor(BusSensor):
@@ -94,10 +110,8 @@ class ShiftSensor(BusSensor):
 
     _key = "current_shift"
 
-    _attr_name = "Deset Bus Current Shift"
-    _attr_options = [
-        shift.name for shift in SHIFTS
-    ]
+    _attr_name = "Desert Bus Current Shift"
+    _attr_options = [shift.name for shift in SHIFTS]
 
     @property
     def extra_state_attributes(self):
@@ -114,14 +128,14 @@ class YearSensor(BusSensor):
     """"""
 
     _key = "db_year"
-    _attr_name = "Deset Bus Year"
+    _attr_name = "Desert Bus Year"
 
 
 class StartSensor(BusSensor):
     """"""
 
     _key = "start_time"
-    _attr_name = "Deset Bus Start Time"
+    _attr_name = "Desert Bus Start Time"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
 
@@ -137,12 +151,12 @@ class FastBusSensor(SensorEntity):
     def __init__(self, bus_api: APIBus) -> None:
         """Initialize the sensor."""
         # Usual setup is done here. Callbacks are added in async_added_to_hass.
-        self.entity_id = "sensor.desertbus_{}".format(self._key)
-        self._attr_unique_id = "desertbus_{}".format(self._key)
+#        self.entity_id = f"sensor.desertbus_{bus_api.series.name.lower()}_{self._key}"
+        self._attr_unique_id = f"{bus_api.series.name.lower()}_{self._key}"
         self._attr_device_info = DeviceInfo(
-            name="Desert Bus",
+            name=f"Desert Bus {bus_api.series.name}",
             entry_type=DeviceEntryType.SERVICE,
-            identifiers={(DOMAIN, "desertbus")},
+            identifiers={(DOMAIN, f"desertbus-{bus_api.series.id}")},
         )
         self._api = bus_api
 
@@ -176,7 +190,7 @@ class RaisedSensor(FastBusSensor):
     """"""
 
     _key = "total_raised"
-    _attr_name = "Deset Bus Total Raised"
+    _attr_name = "Desert Bus Total Raised"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     #    _attr_suggested_unit_of_measurement = "USD"
@@ -192,7 +206,7 @@ class HoursSensor(FastBusSensor):
     """"""
 
     _key = "run_purchased"
-    _attr_name = "Deset Bus Time Paid For"
+    _attr_name = "Desert Bus Time Paid For"
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = ha_const.UnitOfTime.HOURS
     _attr_suggested_unit_of_measurement = ha_const.UnitOfTime.HOURS
@@ -209,7 +223,7 @@ class HoursCostSensor(FastBusSensor):
     """"""
 
     _key = "next_hour_price_remaining"
-    _attr_name = "Deset Bus Cost Remaining to Next Hour"
+    _attr_name = "Desert Bus Cost Remaining to Next Hour"
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     #    _attr_suggested_unit_of_measurement = "USD"

@@ -23,14 +23,17 @@ _LOGGER = logging.getLogger(__name__)
 class DesertBusUpdateCoordinator(DataUpdateCoordinator):
     """Desert Bus Data Coordinator."""
 
-    def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
+    def __init__(
+        self, *args: typing.Any, db_series: desertbus.Series,  **kwargs: typing.Any
+    ) -> None:
         """Initialize."""
         super().__init__(*args, **kwargs)
         self._last_omega_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
         self._last_stats_check = datetime.datetime.min.replace(tzinfo=BUS_TIMEZONE)
+        self.series = db_series
 
     def _fetch_stats(self) -> desertbus.Event:
-        events = desertbus.get_events("12pEtImeluwLBvtnl7zlaV")
+        events = desertbus.get_events(self.series)
         return max(events, key=lambda x: x.start_time)
 
     def _repeat_stats(self) -> dict:

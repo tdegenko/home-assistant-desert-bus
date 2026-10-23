@@ -37,15 +37,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Desert Bus from a config entry."""
 
-    coordinator = DesertBusUpdateCoordinator(
-        hass,
-        _LOGGER,
-        name=DOMAIN,
-        update_interval=datetime.timedelta(seconds=15),
-    )
-    await coordinator.async_config_entry_first_refresh()
     hass.data.setdefault(DOMAIN, {})[config_entry.entry_id] = {
-        "coordinator": coordinator
+        "coordinator": {},
+        "api": {},
     }
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
@@ -54,7 +48,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    hass.data[DOMAIN][config_entry.entry_id]["api"].close_api()
+    _LOGGER.debug(hass.data[DOMAIN][config_entry.entry_id]["api"])
+    for key,api in hass.data[DOMAIN][config_entry.entry_id]["api"].items():
+        _LOGGER.debug(f"Need to close {key}: {api}")
+        api.close_api()
     if unload_ok := await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS
     ):

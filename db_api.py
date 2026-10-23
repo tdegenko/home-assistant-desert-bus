@@ -24,10 +24,13 @@ class APIBus:
         """"""
         self._api_inited = False
         self._callbacks: set = set()
+        self.series = series
+        self.event: desertbus.Event
+        self._db_listener: desertbus.PushListener
 
     def init_api(self) -> None:
         """"""
-        events = desertbus.get_events("12pEtImeluwLBvtnl7zlaV")
+        events = desertbus.get_events(self.series)
         self.event = max(events, key=lambda x: x.start_time)
         self._db_listener = desertbus.PushListener(self.event)
 
@@ -54,6 +57,7 @@ class APIBus:
 
     def do_callbacks(self, new_total: desertbus.Event) -> None:
         self._total = new_total
+        _LOGGER.info(f"got new pushed event {new_total}")
         for callback in self._callbacks:
             callback()
 
