@@ -23,13 +23,6 @@ _LOGGER = logging.getLogger(__name__)
 class DesertBusUpdateCoordinator(DataUpdateCoordinator):
     """Desert Bus Data Coordinator."""
 
-    _shifts = {
-        (datetime.time(0), datetime.time(6)): SHIFTS.ZETA,
-        (datetime.time(6), datetime.time(12)): SHIFTS.DAWN,
-        (datetime.time(12), datetime.time(18)): SHIFTS.ALPHA,
-        (datetime.time(18), datetime.time(23, 59, 59)): SHIFTS.NIGHT,
-    }
-
     def __init__(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Initialize."""
         super().__init__(*args, **kwargs)
@@ -131,13 +124,9 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
             with urllib.request.urlopen(OMEGA_CHECK_URL) as omega_check:
                 self._last_omega_check = now
                 if int(omega_check.read().strip()) == 1:
-                    return SHIFTS.OMEGA
-        current_shift = None
+                    return SHIFTS.OMEGA.value
         bus_now = datetime.datetime.now(tz=BUS_TIMEZONE).time()
-        for (shift_start, shift_end), shift_name in self._shifts.items():
-            if shift_start <= bus_now < shift_end:
-                current_shift = shift_name
-        return current_shift
+        return SHIFTS.from_time(bus_now).value
 
     async def _async_update_data(self) -> dict[str, StateType]:
         try:

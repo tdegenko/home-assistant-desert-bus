@@ -55,7 +55,7 @@ async def async_setup_entry(
 
 
 class BusSensor(CoordinatorEntity):
-    """"""
+    """Desert Bus API pull sensors."""
 
     _attr_has_entity_name = True
     _attr_should_poll = False
@@ -64,9 +64,10 @@ class BusSensor(CoordinatorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: DesertBusUpdateCoordinator) -> None:
+        """Initialize."""
         super().__init__(coordinator)
-        self.entity_id = "sensor.desertbus_{}".format(self._key)
-        self._attr_unique_id = "desertbus_{}".format(self._key)
+        self.entity_id = f"sensor.desertbus_{self._key}"
+        self._attr_unique_id = f"desertbus_{self._key}"
         self._attr_device_info = DeviceInfo(
             name="Desert Bus",
             entry_type=DeviceEntryType.SERVICE,
@@ -75,6 +76,7 @@ class BusSensor(CoordinatorEntity):
 
     @property
     def state(self) -> StateType:
+        """Get sensor state."""
         return self.coordinator.data[self._key]
 
 
@@ -94,46 +96,17 @@ class ShiftSensor(BusSensor):
 
     _attr_name = "Deset Bus Current Shift"
     _attr_options = [
-        SHIFTS.DAWN,
-        SHIFTS.ALPHA,
-        SHIFTS.NIGHT,
-        SHIFTS.ZETA,
-        SHIFTS.OMEGA,
+        shift.name for shift in SHIFTS
     ]
-    _shift_colors = {
-        SHIFTS.DAWN: {
-            "primary": [239, 130, 34],
-            "secondary": [192, 106, 41],
-            "tertiary": [236, 227, 58],
-        },
-        SHIFTS.ALPHA: {
-            "primary": [188, 37, 41],
-            "secondary": [116, 18, 20],
-            "tertiary": [188, 37, 41],
-        },
-        SHIFTS.NIGHT: {
-            "primary": [9, 114, 186],
-            "secondary": [36, 34, 98],
-            "tertiary": [34, 171, 226],
-        },
-        SHIFTS.ZETA: {
-            "primary": [94, 55, 137],
-            "secondary": [145, 100, 171],
-            "tertiary": [94, 55, 137],
-        },
-        SHIFTS.OMEGA: {
-            "primary": [117, 204, 214],
-            "secondary": [229, 160, 43],
-            "tertiary": [115, 116, 116],
-        },
-    }
 
     @property
     def extra_state_attributes(self):
+        """"""
+        shift_colors = SHIFTS(self.state).colors
         return {
-            "color_primary": self._shift_colors[self.state]["primary"],
-            "color_secondary": self._shift_colors[self.state]["secondary"],
-            "color_tertiary": self._shift_colors[self.state]["tertiary"],
+            "color_primary": shift_colors["primary"],
+            "color_secondary": shift_colors["secondary"],
+            "color_tertiary": shift_colors["tertiary"],
         }
 
 
@@ -153,7 +126,7 @@ class StartSensor(BusSensor):
 
 
 class FastBusSensor(SensorEntity):
-    """"""
+    """Desert Bus API push sensor."""
 
     @property
     def _key(self) -> str:
