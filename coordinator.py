@@ -14,6 +14,8 @@ from homeassistant.helpers import entity, event
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+import desertbus
+
 from .const import (BUS_TIMEZONE, DB_YEAR_OFFSET, OMEGA_CHECK_URL, RATE_LIMITS,
                     SCRAPE_URL_TEMPLATE, SHIFTS, STATS_URL_TEMPLATE)
 from .util import BusMath
@@ -45,13 +47,16 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
         # If it's November or later, it's likely THIS year's run
         return today.year - DB_YEAR_OFFSET
 
-    def _fetch_stats(self, year: int) -> dict:
-        stats_url = STATS_URL_TEMPLATE.format(year=year)
-        _LOGGER.debug("Fetching stats from %s", stats_url)
-        with urllib.request.urlopen(stats_url) as stats:
-            db_stats = json.load(stats)[0]
-            assert isinstance(db_stats, dict)
-            return db_stats
+    def _fetch_stats(self, year: int) -> desertbus.Event:
+        events = desertbus.get_events("12pEtImeluwLBvtnl7zlaV")
+        return max(events, key=lambda x: x.start_time)
+
+    #        stats_url = STATS_URL_TEMPLATE.format(year=year)
+    #        _LOGGER.debug("Fetching stats from %s", stats_url)
+    #        with urllib.request.urlopen(stats_url) as stats:
+    #            db_stats = json.load(stats)[0]
+    #            assert isinstance(db_stats, dict)
+    #            return db_stats
 
     def _scrape_stats(self, year: int) -> dict:
         scrape_url = SCRAPE_URL_TEMPLATE.format(year=year)
@@ -96,35 +101,37 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
         if self.data is not None:
             _LOGGER.debug("Last updated %s", self._last_stats_check)
             if (
-                now.month != 11
-                and now.isocalendar().week == self._last_stats_check.isocalendar().week
-            ):
-                # Check stats once a week outside of November
-                _LOGGER.debug("Checking once a week")
-                return self._repeat_stats()
-            elif (
                 self.data["start_time"].year < now.year
                 and self._last_stats_check.day < now.day
             ):
                 # In november check once a day untill this years stats show up
-                _LOGGER.debug("Checking once a day")
+                _LOGGER.debug("New year, no stats: Checking once a day")
                 return self._repeat_stats()
-            elif (
+            if (
+                now < self.data["start_time"]
+                and self._last_stats_check + RATE_LIMITS["STATS"]["PRE_RUN"] < now
+            ):
+                _LOGGER.debug(
+                    "Pre-Run: Checking every %s", RATE_LIMITS["STATS"]["PRE_RUN"]
+                )
+                return self._repeat_stats()
+            if (
                 self.data["start_time"]
                 + datetime.timedelta(hours=self.data["run_purchased"])
             ) < now and (
                 self._last_stats_check + RATE_LIMITS["STATS"]["POST_RUN"] < now
             ):
                 # Then every six hours after the run
-                _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["POST_RUN"])
+                _LOGGER.debug(
+                    "Post-Run: Checking every %s", RATE_LIMITS["STATS"]["POST_RUN"]
+                )
                 return self._repeat_stats()
 
-            elif self._last_stats_check + RATE_LIMITS["STATS"]["DURING_RUN"] > now:
+            if self._last_stats_check + RATE_LIMITS["STATS"]["DURING_RUN"] > now:
                 # and every 15 minutes durring the run
                 _LOGGER.debug("Checking every %s", RATE_LIMITS["STATS"]["DURING_RUN"])
                 return self._repeat_stats()
 
-        db_stats = {}
         try:
             db_stats = self._fetch_stats(self.get_db_year())
         except urllib.error.HTTPError as err:
@@ -157,11 +164,10 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
         else:
             return self._repeat_stats()
 
-        bus_start = datetime.datetime.fromisoformat(db_stats["Year Start Date-Time"])
-        bus_start = bus_start.replace(tzinfo=BUS_TIMEZONE)
-        run_purchased = int(db_stats["Max Hour Purchased"])
-
-        total = float(db_stats["Total Raised"])
+        bus_start = db_stats.start_time
+        # bus_start = bus_start.replace(tzinfo=BUS_TIMEZONE)
+        total = float(db_stats.total.amount)
+        run_purchased = BusMath.dollars_to_hours(total)
 
         cost_of_purchased = BusMath.hours_to_dollars(run_purchased)
         next_hour_price_total = BusMath.price_for_hour(run_purchased)
@@ -172,7 +178,7 @@ class DesertBusUpdateCoordinator(DataUpdateCoordinator):
                 (bus_start + datetime.timedelta(hours=run_purchased)) > now >= bus_start
             ),
             "total_raised": total,
-            "db_year": db_stats["Year Number"],
+            "db_year": BusMath.get_db_count(bus_start.year),
             "run_purchased": run_purchased,
             "next_hour_price_total": next_hour_price_total,
             "next_hour_price_remaining": next_hour_price_remaining,

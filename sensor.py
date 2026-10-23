@@ -17,10 +17,13 @@ from homeassistant.helpers.typing import (UNDEFINED, ConfigType,
                                           UndefinedType)
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+import desertbus
+
 # from . import DesertBus
 from .const import DOMAIN, SHIFTS
 from .coordinator import DesertBusUpdateCoordinator
-from .pubnub_desertbus import BusNub
+# from .pubnub_desertbus import BusNub
+from .db_api import APIBus
 from .util import BusMath
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,10 +38,7 @@ async def async_setup_entry(
     """Set up the sensor platform."""
     _LOGGER.debug(config_entry.data)
     coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
-    bus_api = BusNub(
-        subscribe_key=config_entry.data["subscribe_key"],
-        channel=config_entry.data["channel"],
-    )
+    bus_api = APIBus(desertbus.Series(name="prime", id="12pEtImeluwLBvtnl7zlaV"))
     hass.data.setdefault(DOMAIN, {})[config_entry.entry_id]["api"] = bus_api
     add_entities(
         [
@@ -51,10 +51,12 @@ async def async_setup_entry(
             RaisedSensor(bus_api),
         ]
     )
-    bus_api.init_api()
+    await hass.async_add_executor_job(bus_api.init_api)
 
 
 class BusSensor(CoordinatorEntity):
+    """"""
+
     _attr_has_entity_name = True
     _attr_should_poll = False
 
@@ -77,11 +79,15 @@ class BusSensor(CoordinatorEntity):
 
 
 class CurrentlyBussingSensor(BusSensor):
+    """"""
+
     _key = "now_bussing"
     _attr_name = "Deset Bus Currently Bussing"
 
 
 class ShiftSensor(BusSensor):
+    """"""
+
     """Desert Bus Shift Sensor"""
 
     _key = "current_shift"
@@ -132,24 +138,30 @@ class ShiftSensor(BusSensor):
 
 
 class YearSensor(BusSensor):
+    """"""
+
     _key = "db_year"
     _attr_name = "Deset Bus Year"
 
 
 class StartSensor(BusSensor):
+    """"""
+
     _key = "start_time"
     _attr_name = "Deset Bus Start Time"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
 
 class FastBusSensor(SensorEntity):
+    """"""
+
     @property
     def _key(self) -> str:
         raise NotImplementedError
 
     should_poll = False
 
-    def __init__(self, bus_api: BusNub) -> None:
+    def __init__(self, bus_api: APIBus) -> None:
         """Initialize the sensor."""
         # Usual setup is done here. Callbacks are added in async_added_to_hass.
         self.entity_id = "sensor.desertbus_{}".format(self._key)
@@ -188,6 +200,8 @@ class FastBusSensor(SensorEntity):
 
 
 class RaisedSensor(FastBusSensor):
+    """"""
+
     _key = "total_raised"
     _attr_name = "Deset Bus Total Raised"
     _attr_device_class = SensorDeviceClass.MONETARY
@@ -202,6 +216,8 @@ class RaisedSensor(FastBusSensor):
 
 
 class HoursSensor(FastBusSensor):
+    """"""
+
     _key = "run_purchased"
     _attr_name = "Deset Bus Time Paid For"
     _attr_device_class = SensorDeviceClass.DURATION
@@ -217,9 +233,10 @@ class HoursSensor(FastBusSensor):
 
 
 class HoursCostSensor(FastBusSensor):
+    """"""
+
     _key = "next_hour_price_remaining"
     _attr_name = "Deset Bus Cost Remaining to Next Hour"
-    _attr_device_class = SensorDeviceClass.DURATION
     _attr_device_class = SensorDeviceClass.MONETARY
     _attr_native_unit_of_measurement = "USD"
     #    _attr_suggested_unit_of_measurement = "USD"
@@ -228,6 +245,7 @@ class HoursCostSensor(FastBusSensor):
     def native_value(self) -> StateType:
         """Return the value reported by the sensor."""
         total = self._api.total_raised
+        _LOGGER.debug(f"total:{total}:{total.__class__}")
         run_purchased = BusMath.dollars_to_hours(total)
         cost_of_purchased = BusMath.hours_to_dollars(run_purchased)
         next_hour_price_total = BusMath.price_for_hour(run_purchased)

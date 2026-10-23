@@ -1,5 +1,7 @@
 import math
 
+from .const import (DB_YEAR_OFFSET)
+
 
 class BusMath:
     # Math Largely from: https://loadingreadyrun.com/forum/viewtopic.php?t=10231
@@ -15,3 +17,6 @@ class BusMath:
     @staticmethod
     def hours_to_dollars(hours: int, rate: float = 1.07) -> float:
         return round((1 - (rate**hours)) / (1 - rate), 2)
+
+    def get_db_count(year: int) -> int:
+        return year - DB_YEAR_OFFSET

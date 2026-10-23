@@ -17,12 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_NAME = "Desert Bus For Hope"
 
-DATA_SCHEMA = vol.Schema(
-    {
-        ("subscribe_key"): str,
-        ("channel"): str,
-    }
-)
+DATA_SCHEMA = vol.Schema({})
 
 
 async def validate_input(hass: HomeAssistant, data: dict) -> bool:
@@ -69,7 +64,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         """Handle reconfiguration of the receiver."""
-        #return await self.async_step_common()
+        # return await self.async_step_common()
         errors = {}
         _LOGGER.debug("Reconfiguring desertbus")
         if user_input is not None:
@@ -80,7 +75,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if data:
                     _LOGGER.debug("Data validates")
                     await self.async_set_unique_id("desert-bus-cloud")
-                    return self.async_update_reload_and_abort(self._get_reconfigure_entry(), data=user_input)
+                    return self.async_update_reload_and_abort(
+                        self._get_reconfigure_entry(), data=user_input
+                    )
                 else:
                     _LOGGER.debug("Data DOES NOT validates")
                     errors["base"] = "unable_validate"
