@@ -40,12 +40,13 @@ class APIBus:
 
     def close_api(self) -> None:
         """"""
-        self._db_listener.teardown()
+        if self.online:
+            self._db_listener.teardown()
 
     @property
     def online(self) -> bool:
         """"""
-        return self._api_inited
+        return self._api_inited and self._db_listener.connected
 
     def register_callback(self, call_back: collections.abc.Callable) -> None:
         """"""
@@ -56,6 +57,7 @@ class APIBus:
         self._callbacks.remove(call_back)
 
     def do_callbacks(self, new_total: desertbus.Event) -> None:
+        """"""
         self._total = new_total
         _LOGGER.info(f"got new pushed event {new_total}")
         for callback in self._callbacks:
